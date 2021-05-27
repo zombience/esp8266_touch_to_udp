@@ -1,6 +1,7 @@
-#ifndef UDP_DEBUG_H
-#define UDP_DEBUG_H
+#ifndef UDP_h
+#define UDP_h
 
+#define PRINT
 // listen for responses
 //#define LISTENMODE
 
@@ -52,6 +53,10 @@ void initializeUDP()
 // assign function pointer to touchsensor static method 
 void sendMessage(const char * msg)
 {
+	#ifdef PRINT
+	Serial.print("sending msg: ");
+	Serial.println(msg);
+	#endif
   UDP.beginPacket(HOST_IP, HOST_PORT);
   UDP.write(msg);
   UDP.endPacket();

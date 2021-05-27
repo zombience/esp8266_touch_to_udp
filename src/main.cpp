@@ -1,38 +1,62 @@
 #include <Arduino.h>
 #include <WiFiUDP.h>
 
-#include "touchsensor.h"
+#include "sensorhandlers.h"
 #include "udphandler.h"
 
 /* pin settings */
-#define INPUTPIN 5
+#define SENSOR0 5
+#define SENSOR1 4 
+#define SENSOR2 14 
 
 // multiple touch handlers can listen to the same pin
-TouchSensor *instantSensor;
-LongpressTouchSensor *longPressSensor;
-DoubletapTouchSensor *doubleTapSensor;
+std::vector<WhileDownSensor> multiTouchSensors {
+	WhileDownSensor(SENSOR0),
+	WhileDownSensor(SENSOR1),
+	WhileDownSensor(SENSOR2),
+};
+
+std::vector<TouchSensorBase*> singleTouchSensors{
+	new OnTouchSensor(SENSOR1, "sensor one touch down"),
+	new OnReleaseSensor(SENSOR1, "sensor one released"),
+	new LongpressSensor(SENSOR2, "sensor two long press"),
+	new DoubletapSensor(SENSOR2, "sensor two double tap"),
+};
+
+MultiSensor *allSensors;
+
 
 void setup() 
 {
   
-  // initialize inside udphandler.h
-  initializeUDP();
-  // assign delegate to TouchSensor class for UDP send access
-  TouchSensor::sendMessage = &sendMessage;
-  instantSensor = new TouchSensor(INPUTPIN, "instant press");
-  longPressSensor = new LongpressTouchSensor(INPUTPIN, "long press");
-  doubleTapSensor = new DoubletapTouchSensor(INPUTPIN, "double tap");
+	// initialize inside udphandler.h
+	initializeUDP();
+	// assign delegate to TouchSensor class for UDP send access
+	SensorAction::sendMessage = &sendMessage;
+	
+	allSensors = new MultiSensor(multiTouchSensors, "all sensors down");
+	
 }
 
 void loop() 
 {
-  instantSensor->pollTouch();
-  longPressSensor->pollTouch();
-  doubleTapSensor->pollTouch();
+	if(allSensors->pollSensors())
+	{
+		for (unsigned int i = 0; i < singleTouchSensors.size(); i++)
+		{
+			singleTouchSensors[i]->resetSensor();
+		}
+		return;
+	}
 
-  // defined in udphandler.h
-  #ifdef LISTENMODE
-  packetListen();
-  #endif // LISTENMODE
+	for (unsigned int i = 0; i < singleTouchSensors.size(); i++)
+	{
+		singleTouchSensors[i]->pollSensor();
+	}
+
+	// defined in udphandler.h
+	#ifdef LISTENMODE
+	packetListen();
+	#endif // LISTENMODE
 }
 
