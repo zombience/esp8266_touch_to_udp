@@ -38,17 +38,21 @@ void initializeUDP()
   Serial.print("Connected. received IP assignment: " );
   Serial.println(WiFi.localIP());
 
-  #ifdef LISTENMODE
+  UDP.begin(LISTEN_PORT);
   Serial.print("listening on port: ");
   Serial.println(LISTEN_PORT);
-  UDP.begin(LISTEN_PORT);
-  #endif // LISTENMODE
 
   UDP.beginPacket(HOST_IP, HOST_PORT);
   UDP.write("esp connected");
   UDP.endPacket();
   
 };
+
+void fakeSendMessage(const char *msg)
+{
+	Serial.print("fake send msg: ");
+	Serial.println(msg);
+}
 
 // assign function pointer to touchsensor static method 
 void sendMessage(const char * msg)
@@ -61,32 +65,4 @@ void sendMessage(const char * msg)
   UDP.write(msg);
   UDP.endPacket();
 };
-
-
-#ifdef LISTENMODE
-// listen for heartbeats
-char packet [255];
-void packetListen()
-{
-  int packetSize = UDP.parsePacket();
-  if(packetSize) 
-  {
-    int len = UDP.read(packet, 255);
-    if(len > 0)
-    {
-      packet[len] = '\0';
-    }
-    Serial.print("received message from IP: ");
-    Serial.print(UDP.remoteIP());
-    Serial.print(" port: ");
-    Serial.print(UDP.remotePort());
-    Serial.print(" ");
-    Serial.println(packet);
-
-    UDP.beginPacket(HOST_IP, HOST_PORT);
-    UDP.write("received heartbeat");
-    UDP.endPacket();
-  }
-};
-#endif // LISTENMODE 
 #endif
