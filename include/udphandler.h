@@ -2,8 +2,8 @@
 #define UDP_h
 
 #define PRINT
-// listen for responses
-//#define LISTENMODE
+// use to test button feedback and ignore networking
+//#define BUTTONTESTONLY
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
@@ -18,6 +18,7 @@
   #define WIFI_PW "yourpassword"
   const char * HOST_IP = "xxx.xxx.xxx.xxx"; // target ip address
   const int HOST_PORT = 0000; // target port
+	const int LISTEN_PORT = 0000; // port that ESP listens for return messages
 */
 #include "wifi_info.h"
 
@@ -26,6 +27,7 @@ WiFiUDP UDP;
 void initializeUDP()
 {
   Serial.begin(115200);
+	#ifndef BUTTONTESTONLY
   Serial.print("connecting to");
   Serial.println(SSID);
   WiFi.begin(SSID, WIFI_PW);
@@ -45,14 +47,8 @@ void initializeUDP()
   UDP.beginPacket(HOST_IP, HOST_PORT);
   UDP.write("esp connected");
   UDP.endPacket();
-  
+  #endif
 };
-
-void fakeSendMessage(const char *msg)
-{
-	Serial.print("fake send msg: ");
-	Serial.println(msg);
-}
 
 // assign function pointer to touchsensor static method 
 void sendMessage(const char * msg)
@@ -61,8 +57,10 @@ void sendMessage(const char * msg)
 	Serial.print("sending msg: ");
 	Serial.println(msg);
 	#endif
+	#ifndef BUTTONTESTONLY
   UDP.beginPacket(HOST_IP, HOST_PORT);
   UDP.write(msg);
   UDP.endPacket();
+	#endif
 };
 #endif

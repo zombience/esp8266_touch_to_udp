@@ -6,32 +6,12 @@
 // assign UDP send method from udphandler.h
 void(*SensorAction::sendMessage)(const char * msg){};
 
-
+// listen for multiple sensors down simultaneously 
+// requires WhileDownSensors to be defined and passed in
 MultiSensor::MultiSensor(std::vector<WhileDownSensor> sensors, const char *msg)
 {
 	_sensors = sensors;
 	_message = msg;
-};
-
-bool
-MultiSensor::pollSensors()
-{
-	bool allSensorsDown = true;
-	for (unsigned int i = 0; i < _sensors.size(); i++)
-	{
-		if(!_sensors[i].pollSensor())
-		{
-			allSensorsDown = false;
-			_hasSentMessage = false;
-			break;
-		}
-	}
-	if(allSensorsDown && !_hasSentMessage)
-	{
-		SensorAction::sendMessage(_message);
-		_hasSentMessage= true;
-	}
-	return allSensorsDown;
 };
 
 TouchSensorBase::TouchSensorBase(int hwpin, const char *msg)
@@ -43,6 +23,37 @@ TouchSensorBase::TouchSensorBase(int hwpin, const char *msg)
 	_allowInput = true;
 };
 
+bool
+MultiSensor::pollSensors()
+{
+	// if more than one sensor is down, return true
+	// prevent processing any other sensors while waiting for multisensor input
+	uint8 sensorDownCount = 0;
+
+	for (unsigned int i = 0; i < _sensors.size(); i++)
+	{
+		if(!_sensors[i].pollSensor())
+		{
+			_hasSentMessage = false;
+		}
+		else
+		{
+			sensorDownCount++;
+		}
+	}
+	if(sensorDownCount == _sensors.size() && !_hasSentMessage)
+	{
+		SensorAction::sendMessage(_message);
+		_hasSentMessage= true;
+	}
+
+	// return true if more than one sensor is down
+	// prevent processing other types of touches 
+	// if multitouch is partially engaged
+	return sensorDownCount > 1;
+};
+
+
 void
 TouchSensorBase::resetSensor()
 {
@@ -50,7 +61,7 @@ TouchSensorBase::resetSensor()
 }
 
 bool
-TouchSensorBase::isDown(int state)
+TouchSensorBase::isTouched(int state)
 {
 	return state == HIGH;
 };
@@ -62,7 +73,7 @@ TouchSensorBase::allowInputProcessing()
 	if(_allowInput) return true;
 	int state = digitalRead(_pin);
 	// false if sensor is currently being touched
-	if(isDown(state))
+	if(isTouched(state))
 	{
 		_allowInput = false;
 	} 
@@ -76,7 +87,6 @@ TouchSensorBase::allowInputProcessing()
 	return _allowInput;
 }
 
-
 bool 
 WhileDownSensor::pollSensor()
 {
@@ -85,7 +95,7 @@ WhileDownSensor::pollSensor()
 
 	int state = digitalRead(_pin);
 	_lastSensorState = state;
-	return isDown(state);
+	return isTouched(state);
 };
 
 bool
@@ -98,20 +108,20 @@ OnTouchSensor::pollSensor()
 	}
 
 	int state = digitalRead(_pin);
-	bool isTouched = false;
+	bool hasBeentouched = false;
 	bool allowTouch = abs(millis() - _lastTouchTime) > _debounceTime;
 	if(_lastSensorState != state && allowTouch)
 	{
 		// listen for touch up (release) rather than touch down
-		if(isDown(state))
+		if(isTouched(state))
 		{
-			isTouched = true;
+			hasBeentouched = true;
 			_lastTouchTime = millis();
 			SensorAction::sendMessage(_message);
 		}
 		_lastSensorState = state;
 	}
-	return isTouched;
+	return hasBeentouched;
 };
 
 bool
@@ -124,20 +134,20 @@ OnReleaseSensor::pollSensor()
 	} 
 
 	int state = digitalRead(_pin);
-	bool isTouched = false;
+	bool hasBeentouched = false;
 	bool allowTouch = abs(millis() - _lastTouchTime) > _debounceTime;
 	if(_lastSensorState != state && allowTouch)
 	{
 		// listen for touch up (release) rather than touch down
-		if(!isDown(state))
+		if(!isTouched(state))
 		{
-			isTouched = true;
+			hasBeentouched = true;
 			_lastTouchTime = millis();
 			SensorAction::sendMessage(_message);
 		}
 		_lastSensorState = state;
 	}
-	return isTouched;
+	return hasBeentouched;
 };
 
 bool 
@@ -150,11 +160,11 @@ LongpressSensor::pollSensor()
 	}
 
 	int state = digitalRead(_pin);
-	bool isTouched = false;
+	bool hasBeentouched = false;
 
 	if(_lastSensorState != state)
 	{
-		if(isDown(state))
+		if(isTouched(state))
 		{
 			_isTouchDown = true;
 			_lastTouchTime = millis();
@@ -170,45 +180,59 @@ LongpressSensor::pollSensor()
 	{
 		// reset
 		_isTouchDown = false;
-		isTouched = true;
+		hasBeentouched = true;
 		SensorAction::sendMessage(_message);
 	}
-	return isTouched;
+	return hasBeentouched;
 };
 
+// multitapsensor will process touches on release
+// multitapsensor can handle up to 255 taps
+// idk why you'd want that... but you can
 bool 
-DoubletapSensor::pollSensor()
+MultitapSensor::pollSensor()
 {
-
-	if(!allowInputProcessing()) 
+	// use _allowInput as reset
+	if(!_allowInput)
 	{
-		_hasReceivedFirstTouch = false;
+		_lastSensorState = LOW;
+		_lastTouchTime = millis();
+		_tapCount = 0;
+		_allowInput = true;
 		return false;
 	}
 
-	int state = digitalRead(_pin);
-	bool isTouched = false;
-	if(abs(millis() - _lastTouchTime) > _tapInterval)
+	if(_tapCount > 0 && abs(millis() - _lastTouchTime) > _tapWindow)
 	{
-		_hasReceivedFirstTouch = false;
-	}
-	if(_lastSensorState != state)
-	{
-		if(isDown(state))
+		bool wasTriggered = false;
+
+		// only execute if tapCount is within range of messages defined
+		if(_tapCount - 1 < _tapMessages.size())
 		{
-			if(_hasReceivedFirstTouch && abs(millis() - _lastTouchTime) < _tapInterval)
-			{
-				isTouched = true;
-				_hasReceivedFirstTouch = false;
-				SensorAction::sendMessage(_message);
-			}
-			else if(!_hasReceivedFirstTouch)
-			{
-				_hasReceivedFirstTouch = true;
-				_lastTouchTime = millis();
-			}
+			const char * msg = _tapMessages[_tapCount - 1];
+			SensorAction::sendMessage(msg);
+			wasTriggered = true;
 		}
-		_lastSensorState = state;
+
+		resetSensor();
+		return wasTriggered;
 	}
-	return isTouched;
-}
+
+	int state = digitalRead(_pin);
+
+	if(state == _lastSensorState)
+	{
+		return false;
+	}
+	_lastSensorState = state;
+
+	if(!isTouched(state))
+	{
+		_lastTouchTime = millis();
+		_tapCount ++;
+		// Serial.print("sensor tap count: ");
+		// Serial.println(_tapCount);
+	} 
+	// return true in order to cancel other multitap sensor processors
+	return true;
+};

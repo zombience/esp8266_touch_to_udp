@@ -23,7 +23,7 @@ class TouchSensorBase
 		// prevState and curState change to LOW (i.e. no touch)
 		bool _allowInput;
 		const char *_message;
-		bool isDown(int state);
+		bool isTouched(int state);
 		// monitor reset state
 		// prevent sensor checks until state has cleared
 		bool allowInputProcessing();
@@ -83,6 +83,7 @@ class LongpressSensor : public TouchSensorBase
 		const int _holdLength = 800;
 };
 
+
 // // will automatically send message on doubletap
 class DoubletapSensor : public TouchSensorBase
 {
@@ -94,6 +95,21 @@ class DoubletapSensor : public TouchSensorBase
 		bool _hasReceivedFirstTouch;
 		// time in milliseconds
 		const int _tapInterval = 500;
+};
+
+class MultitapSensor : public TouchSensorBase
+{
+	public:
+		MultitapSensor(int hwpin, std::vector<const char *> messages) : TouchSensorBase{hwpin, "none"}, _tapMessages {messages}{};
+		virtual bool pollSensor();
+	private:
+		uint8 _tapCount = 0;
+		// how long to wait for next tap
+		// if no tap received, send current tap count msg
+		const int _tapWindow = 300;
+		std::vector<const char *> _tapMessages;
+
+		
 };
 
 // provide static reference to sendMessage (delegate pointing to udphandler.h)
