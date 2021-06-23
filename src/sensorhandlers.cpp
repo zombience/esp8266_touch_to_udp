@@ -192,17 +192,8 @@ LongpressSensor::pollSensor()
 bool 
 MultitapSensor::pollSensor()
 {
-	// use _allowInput as reset
-	if(!_allowInput)
-	{
-		_lastSensorState = LOW;
-		_lastTouchTime = millis();
-		_tapCount = 0;
-		_allowInput = true;
-		return false;
-	}
 
-	if(_tapCount > 0 && abs(millis() - _lastTouchTime) > _tapWindow)
+	if(_allowInput &&  _tapCount > 0 && abs(millis() - _lastTouchTime) > _tapWindow)
 	{
 		bool wasTriggered = false;
 
@@ -213,8 +204,8 @@ MultitapSensor::pollSensor()
 			SensorAction::sendMessage(msg);
 			wasTriggered = true;
 		}
-
-		resetSensor();
+		_lastTouchTime = millis();
+		_tapCount = 0;
 		return wasTriggered;
 	}
 
@@ -228,10 +219,18 @@ MultitapSensor::pollSensor()
 
 	if(!isTouched(state))
 	{
-		_lastTouchTime = millis();
-		_tapCount ++;
-		// Serial.print("sensor tap count: ");
-		// Serial.println(_tapCount);
+		if(_allowInput)
+		{
+			_tapCount ++;
+			_lastTouchTime = millis();
+			// Serial.print("sensor tap count: ");
+			// Serial.println(_tapCount);
+		}
+		else
+		{
+			_allowInput = true;
+			_tapCount = 0;
+		}
 	} 
 	// return true in order to cancel other multitap sensor processors
 	return true;

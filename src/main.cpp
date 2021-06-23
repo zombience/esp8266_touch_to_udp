@@ -21,23 +21,19 @@ std::vector<WhileDownSensor> multiTouchSensors {
 MultiSensor *allSensors;
 
 std::vector<TouchSensorBase*> singleTouchSensors{
+	// onTouch and OnRelease sensors should be avoided 
+	// on pins that are using multitap sensors
 	new OnTouchSensor(SENSOR0, "sensor zero touch down"),
 	new OnReleaseSensor(SENSOR0, "sensor zero released"),
 	new LongpressSensor(SENSOR0, "sensor zero long press"),
-	new OnTouchSensor(SENSOR1, "sensor one touch down"),
-	new OnReleaseSensor(SENSOR1, "sensor one released"),
+	// new OnTouchSensor(SENSOR1, "sensor one touch down"),
+	// new OnReleaseSensor(SENSOR1, "sensor one released"),
 	new LongpressSensor(SENSOR1, "sensor one long press"),
-	new OnTouchSensor(SENSOR2, "sensor two touch down"),
-	new OnReleaseSensor(SENSOR2, "sensor two released"),
+	// new OnTouchSensor(SENSOR2, "sensor two touch down"),
+	// new OnReleaseSensor(SENSOR2, "sensor two released"),
 	new LongpressSensor(SENSOR2, "sensor two long press"),
 };
 
-
-std::vector<const char*> s0Messages{
-	"s0_single_tap", 
-	"s0_double_tap", 
-	"s0_triple_tap"
-};
 
 std::vector<const char*> s1Messages{
 	"s1_single_tap", 
@@ -52,7 +48,6 @@ std::vector<const char*> s2Messages{
 };
 
 std::vector<TouchSensorBase*> multiTapSensors{
-	new MultitapSensor(SENSOR0, s0Messages),
 	new MultitapSensor(SENSOR1, s1Messages),
 	new MultitapSensor(SENSOR2, s2Messages),
 };
@@ -72,6 +67,11 @@ void setup()
 
 void loop() 
 {
+
+	// it is possible to use multiple processors on the same pins
+	// however some may send multiple undesired messages
+	// some cases are easy to prevent multi messages (e.g. multitap vs. longpress, or multisensor vs. single)
+	// the following gives examples of multiple processors on the same sensors
 
 	// will be true if more than one sensor is simultaneously touched
 	bool isMultitouchEngaged = allSensors->pollSensors();
@@ -100,21 +100,24 @@ void loop()
 		}
 	}
 	
-	if(tappedIndex >= 0)
+
+	bool wasSingleTouchPressed = false;
+	for (unsigned int i = 0; i < singleTouchSensors.size(); i++)
+	{
+		if(singleTouchSensors[i]->pollSensor())
+		{
+			wasSingleTouchPressed = true;
+		}
+	}
+	
+	// reset multitap sensors if e.g. longpress was triggered
+	if(tappedIndex >= 0 || wasSingleTouchPressed)
 	{
 		for(unsigned int i = 0; i < multiTapSensors.size(); i++)
 		{
 			if(i == tappedIndex) continue;
 			multiTapSensors[i]->resetSensor();
 		}
-	}
-
-	
-	// using multitap and singleTouch sensors together on the same sensor
-	// will send extra touches. this is included purely for example purposes
-	for (unsigned int i = 0; i < singleTouchSensors.size(); i++)
-	{
-		singleTouchSensors[i]->pollSensor();
 	}
 }
 
